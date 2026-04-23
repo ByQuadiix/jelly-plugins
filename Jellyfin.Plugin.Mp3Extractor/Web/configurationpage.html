@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <title>Mp3 Extractor – Konfiguration</title>
+</head>
+<body>
+    <div id="Mp3ExtractorConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+         data-require="emby-input,emby-button,emby-checkbox">
+
+        <div data-role="content">
+            <div class="content-primary">
+
+                <h2 style="margin-bottom:0.25em;">Mp3 Extractor</h2>
+                <p class="fieldDescription">
+                    Wähle die Bibliotheken aus, für die der <em>„Als MP3 herunterladen"</em>-Button
+                    im Kontextmenü verfügbar sein soll.
+                </p>
+
+                <div id="libraryList" style="margin-top:1.5em;">
+                    <p>Bibliotheken werden geladen …</p>
+                </div>
+
+                <br />
+                <button is="emby-button" type="submit" class="raised button-submit block"
+                        id="btnSave">
+                    <span>Speichern</span>
+                </button>
+
+                <div id="saveMessage" style="margin-top:1em;display:none;color:var(--accent-color);">
+                    ✔ Einstellungen gespeichert.
+                </div>
+
+            </div>
+        </div>
+
+        <script>
+        /* global ApiClient, Dashboard */
+        (function () {
+            'use strict';
+
+            const PLUGIN_ID = 'a8b6e2f4-3c1d-4e7a-9f0b-2d5c8e1f4a7b';
+
+            /* ── helpers ─────────────────────────────────────────────────── */
+            function getConfig() {
+                return ApiClient.getPluginConfiguration(PLUGIN_ID);
+            }
+
+            function saveConfig(config) {
+                return ApiClient.updatePluginConfiguration(PLUGIN_ID, config);
+            }
+
+            function getLibraries() {
+                return ApiClient.getVirtualFolders();
+            }
+
+            /* ── render ──────────────────────────────────────────────────── */
+            function renderLibraries(libraries, enabledIds) {
+                const list = document.getElementById('libraryList');
+                list.innerHTML = '';
+
+                if (!libraries || libraries.length === 0) {
+                    list.innerHTML = '<p>Keine Bibliotheken gefunden.</p>';
+                    return;
+                }
+
+                libraries.forEach(function (lib) {
+                    const id = lib.ItemId;
+                    const checked = enabledIds.includes(id.replace(/-/g, '').toLowerCase());
+
+                    const label = document.createElement('label');
+                    label.className = 'checkboxContainer';
+                    label.style.cssText = 'display:flex;align-items:center;gap:0.5em;margin:0.5em 0;';
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.is = 'emby-checkbox';
+                    checkbox.value = id;
+                    checkbox.checked = checked;
+                    checkbox.id = 'lib_' + id;
+
+                    const span = document.createElement('span');
+                    span.textContent = lib.Name;
+
+                    label.appendChild(checkbox);
+                    label.appendChild(span);
+                    list.appendChild(label);
+                });
+            }
+
+            /* ── init ────────────────────────────────────────────────────── */
+            document.getElementById('Mp3ExtractorConfigPage')
+                .addEventListener('pageshow', function () {
+
+                Promise.all([getConfig(), getLibraries()])
+                    .then(function (results) {
+                        const config = results[0];
+                        const libraries = results[1];
+                        const enabled = (config.EnabledLibraryIds || [])
+                            .map(function (x) { return x.toLowerCase(); });
+                        renderLibraries(libraries, enabled);
+                    })
+                    .catch(function (err) {
+                        console.error('[Mp3Extractor] Fehler beim Laden:', err);
+                        document.getElementById('libraryList').innerHTML =
+                            '<p style="color:red;">Fehler beim Laden der Bibliotheken.</p>';
+                    });
+            });
+
+            /* ── save ────────────────────────────────────────────────────── */
+            document.getElementById('btnSave').addEventListener('click', function () {
+                const checkboxes = document.querySelectorAll('#libraryList input[type="checkbox"]');
+                const ids = [];
+                checkboxes.forEach(function (cb) {
+                    if (cb.checked) {
+                        // Store as 32-char hex (no dashes) to match the backend comparison
+                        ids.push(cb.value.replace(/-/g, '').toLowerCase());
+                    }
+                });
+
+                getConfig().then(function (config) {
+                    config.EnabledLibraryIds = ids;
+                    return saveConfig(config);
+                }).then(function () {
+                    const msg = document.getElementById('saveMessage');
+                    msg.style.display = 'block';
+                    setTimeout(function () { msg.style.display = 'none'; }, 3000);
+                    if (typeof Dashboard !== 'undefined') {
+                        Dashboard.processPluginConfigurationUpdateResult();
+                    }
+                }).catch(function (err) {
+                    console.error('[Mp3Extractor] Fehler beim Speichern:', err);
+                });
+            });
+        }());
+        </script>
+
+    </div>
+</body>
+</html>
